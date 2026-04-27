@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Phú Yên · Bản đồ du lịch</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Be+Vietnam+Pro:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f7f4ef;
+    --surface: #ffffff;
+    --text: #1a1a1a;
+    --muted: #7a7670;
+    --border: #e4e0d8;
+    --food: #c0392b;
+    --play: #1a6b8a;
+    --accent: #d4a843;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Be Vietnam Pro', sans-serif; background: var(--bg); color: var(--text); height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 14px; height: 50px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; z-index: 1000; }
+  .logo { font-family: 'Playfair Display', serif; font-size: 18px; }
+  .logo span { color: var(--accent); }
+  .btn { font-family: 'Be Vietnam Pro', sans-serif; font-size: 13px; font-weight: 500; padding: 7px 13px; border-radius: 8px; cursor: pointer; border: none; transition: all 0.15s; }
+  .btn-primary { background: var(--text); color: #fff; }
+  .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  .btn-sm { font-size: 12px; padding: 5px 10px; }
+
+  .app { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+
+  .map-wrap { position: relative; height: 45vh; flex-shrink: 0; }
+  #map { width: 100%; height: 100%; z-index: 1; }
+  .pick-bar { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: var(--text); color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 500; z-index: 500; display: none; white-space: nowrap; box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+  .pick-bar.show { display: block; }
+  .fit-btn { position: absolute; bottom: 12px; right: 12px; z-index: 500; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 7px 11px; font-size: 13px; font-family: 'Be Vietnam Pro', sans-serif; font-weight: 500; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.12); color: var(--text); }
+
+  .bottom-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--surface); border-top: 1px solid var(--border); }
+
+  .filter-section { padding: 9px 12px 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .filter-row { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; }
+  .filter-row::-webkit-scrollbar { display: none; }
+  .chip { font-size: 12px; font-weight: 500; padding: 5px 12px; border-radius: 20px; cursor: pointer; border: 1px solid var(--border); color: var(--muted); background: var(--bg); white-space: nowrap; flex-shrink: 0; user-select: none; }
+  .chip.on-food { background: #fdf0ef; color: var(--food); border-color: #e8b5b2; }
+  .chip.on-play { background: #edf4f8; color: var(--play); border-color: #a8c8d8; }
+  .chip.on-slot { background: #fdf8ee; color: #8a6200; border-color: #e8d49a; }
+
+  .places-list { flex: 1; overflow-y: auto; padding: 6px 10px 16px; -webkit-overflow-scrolling: touch; }
+  .place-card { padding: 10px 11px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; margin-bottom: 5px; display: flex; gap: 10px; align-items: flex-start; }
+  .place-card.active { background: var(--bg); border-color: var(--border); }
+  .card-num { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+  .num-food { background: var(--food); color: #fff; }
+  .num-play { background: var(--play); color: #fff; }
+  .card-info { flex: 1; min-width: 0; }
+  .card-name { font-size: 13px; font-weight: 600; }
+  .card-sub { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card-tags { display: flex; gap: 4px; margin-top: 5px; flex-wrap: wrap; }
+  .tag { font-size: 11px; padding: 2px 7px; border-radius: 10px; }
+  .tag-slot { background: #fdf8ee; color: #8a6200; }
+  .tag-area { background: #f0f0f0; color: #555; }
+  .tag-must { background: #fff8e6; color: #c8860a; }
+  .empty-state { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
+  .info-bar { height: 3px; border-radius: 2px; margin-top: 6px; width: 100%; background: var(--border); overflow: hidden; }
+  .info-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+  .bar-low { background: #e74c3c; }
+  .bar-mid { background: #e67e22; }
+  .bar-high { background: #27ae60; }
+
+  .map-pin { width: 30px; height: 30px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+  .map-pin span { transform: rotate(45deg); }
+  .pin-food { background: var(--food); }
+  .pin-play { background: var(--play); }
+
+  /* DETAIL BOTTOM SHEET */
+  .detail-sheet { position: fixed; bottom: 0; left: 0; right: 0; z-index: 1500; background: var(--surface); border-radius: 16px 16px 0 0; box-shadow: 0 -4px 24px rgba(0,0,0,0.15); transform: translateY(100%); transition: transform 0.3s cubic-bezier(.32,.72,0,1); max-height: 48vh; display: flex; flex-direction: column; }
+  .detail-sheet.show { transform: translateY(0); }
+  .detail-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 10px auto 6px; flex-shrink: 0; }
+  .detail-photos { display: flex; gap: 8px; overflow-x: auto; padding: 0 14px 10px; flex-shrink: 0; scrollbar-width: none; scroll-snap-type: x mandatory; }
+  .detail-photos::-webkit-scrollbar { display: none; }
+  .detail-photo { width: 120px; height: 90px; border-radius: 8px; object-fit: cover; flex-shrink: 0; scroll-snap-align: start; background: var(--bg); }
+  .detail-no-photo { width: 120px; height: 90px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); flex-shrink: 0; }
+  .detail-body { padding: 0 14px 8px; flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .detail-num-name { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .detail-num { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .detail-name { font-size: 16px; font-weight: 600; font-family: 'Playfair Display', serif; }
+  .detail-row { font-size: 13px; color: var(--muted); margin-bottom: 4px; display: flex; gap: 6px; }
+  .detail-row strong { color: var(--text); font-weight: 500; min-width: 70px; }
+  .detail-tags { display: flex; gap: 5px; flex-wrap: wrap; margin: 8px 0; }
+  .detail-actions { display: flex; gap: 8px; padding: 10px 14px 20px; flex-shrink: 0; border-top: 1px solid var(--border); }
+  .detail-actions .btn { flex: 1; padding: 11px; font-size: 14px; border-radius: 10px; }
+
+  /* MODAL — slides up from bottom on mobile */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2000; display: flex; align-items: flex-end; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+  .modal-overlay.show { opacity: 1; pointer-events: all; }
+  .modal { background: var(--surface); border-radius: 16px 16px 0 0; width: 100%; max-height: 92dvh; overflow-y: auto; -webkit-overflow-scrolling: touch; transform: translateY(100%); transition: transform 0.3s cubic-bezier(.32,.72,0,1); }
+  .modal-overlay.show .modal { transform: translateY(0); }
+  .modal-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 10px auto 0; }
+  .modal-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: var(--surface); z-index: 1; }
+  .modal-title { font-family: 'Playfair Display', serif; font-size: 17px; }
+  .modal-close { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--muted); line-height: 1; padding: 2px 8px; }
+  .modal-body { padding: 16px; }
+  .form-group { margin-bottom: 14px; }
+  .form-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; display: block; }
+  .form-input { width: 100%; font-family: 'Be Vietnam Pro', sans-serif; font-size: 15px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); outline: none; -webkit-appearance: none; }
+  .form-input:focus { border-color: #999; background: #fff; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .category-tabs { display: flex; gap: 8px; }
+  .cat-tab { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); cursor: pointer; text-align: center; font-size: 13px; font-weight: 500; color: var(--muted); }
+  .cat-tab.active-food { background: #fdf0ef; color: var(--food); border-color: #e8b5b2; }
+  .cat-tab.active-play { background: #edf4f8; color: var(--play); border-color: #a8c8d8; }
+  .slots-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; }
+  .slot-btn { padding: 10px 4px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); cursor: pointer; text-align: center; font-size: 13px; font-weight: 500; color: var(--muted); }
+  .slot-btn.active { background: #fdf8ee; color: #8a6200; border-color: #e8d49a; }
+  .upload-area { border: 2px dashed var(--border); border-radius: 8px; padding: 18px; text-align: center; cursor: pointer; color: var(--muted); font-size: 13px; line-height: 1.6; }
+  .upload-area input { display: none; }
+  .preview-imgs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .preview-img { width: 64px; height: 64px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border); }
+  .map-pick-hint { font-size: 13px; color: var(--muted); background: var(--bg); padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); line-height: 1.5; }
+  .coord-display { font-size: 12px; color: var(--text); margin-top: 6px; font-family: monospace; min-height: 18px; }
+  .modal-footer { padding: 12px 16px 28px; border-top: 1px solid var(--border); display: flex; gap: 8px; position: sticky; bottom: 0; background: var(--surface); }
+  .modal-footer .btn { flex: 1; padding: 13px; font-size: 15px; border-radius: 10px; }
+
+  .toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: #1a1a1a; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 3000; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; max-width: 90vw; text-align: center; }
+  .toast.show { opacity: 1; }
+
+  @media (min-width: 768px) {
+    .app { flex-direction: row; }
+    .map-wrap { flex: 1; height: 100%; }
+    #map { height: 100%; }
+    .bottom-panel { width: 340px; flex: none; border-top: none; border-right: 1px solid var(--border); order: -1; }
+    .modal-overlay { align-items: center; }
+    .modal { border-radius: 12px; width: 500px; margin: auto; transform: scale(0.95); max-height: 88dvh; }
+    .modal-overlay.show .modal { transform: scale(1); }
+    .modal-handle { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Phú <span>Yên</span> Map</div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <span style="font-size:12px;color:var(--muted)" id="count-badge">0 nơi</span>
+    <button class="btn btn-primary btn-sm" onclick="openModal('add')">+ Thêm</button>
+  </div>
+</header>
+
+<div class="app">
+  <div class="map-wrap">
+    <div id="map"></div>
+    <div class="pick-bar" id="pick-bar">Tap vào bản đồ để chọn vị trí</div>
+    <button class="fit-btn" onclick="fitAll()">⊞ Tổng quan</button>
+  </div>
+  <div class="bottom-panel">
+    <div class="filter-section">
+      <div class="filter-row">
+        <div class="chip" data-type="cat" data-val="food" onclick="toggleFilter(this)">Ăn uống</div>
+        <div class="chip" data-type="cat" data-val="play" onclick="toggleFilter(this)">Vui chơi</div>
+        <div style="width:1px;flex-shrink:0"></div>
+        <div class="chip" data-type="slot" data-val="breakfast" onclick="toggleFilter(this)">Sáng</div>
+        <div class="chip" data-type="slot" data-val="lunch" onclick="toggleFilter(this)">Trưa</div>
+        <div class="chip" data-type="slot" data-val="afternoon" onclick="toggleFilter(this)">Chiều</div>
+        <div class="chip" data-type="slot" data-val="dinner" onclick="toggleFilter(this)">Tối</div>
+      </div>
+    </div>
+    <div class="places-list" id="places-list"></div>
+  </div>
+</div>
+
+<!-- DETAIL BOTTOM SHEET -->
+<div class="detail-sheet" id="detail-sheet">
+  <div class="detail-handle" onclick="closeDetail()"></div>
+  <div class="detail-photos" id="detail-photos"></div>
+  <div class="detail-body" id="detail-body"></div>
+  <div class="detail-actions">
+    <button class="btn btn-outline" onclick="closeDetail()">Đóng</button>
+    <button class="btn btn-primary" id="detail-edit-btn" onclick="">✏️ Sửa</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-overlay" onclick="closeModalOutside(event)">
+  <div class="modal" id="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Thêm địa điểm</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Loại</label>
+        <div class="category-tabs">
+          <div class="cat-tab active-food" id="tab-food" onclick="setCategory('food')">Quán ăn</div>
+          <div class="cat-tab" id="tab-play" onclick="setCategory('play')">Điểm tham quan</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Tên</label>
+          <input class="form-input" id="f-name" placeholder="Để trống nếu không có">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Khu vực</label>
+          <input class="form-input" id="f-area" placeholder="TP Tuy Hòa">
+        </div>
+      </div>
+      <div class="form-group" id="fg-specialty">
+        <label class="form-label">Món đặc trưng</label>
+        <input class="form-input" id="f-specialty" placeholder="VD: Bún cá thổ">
+      </div>
+      <div class="form-group" id="fg-must">
+        <label class="form-label">Must try ⭐</label>
+        <input class="form-input" id="f-must" placeholder="VD: Bún cá lá é">
+      </div>
+      <div class="form-group" id="fg-slots">
+        <label class="form-label">Giờ bán</label>
+        <div class="slots-grid">
+          <div class="slot-btn" data-slot="breakfast" onclick="toggleSlot(this)">Sáng</div>
+          <div class="slot-btn" data-slot="lunch" onclick="toggleSlot(this)">Trưa</div>
+          <div class="slot-btn" data-slot="afternoon" onclick="toggleSlot(this)">Chiều</div>
+          <div class="slot-btn" data-slot="dinner" onclick="toggleSlot(this)">Tối</div>
+        </div>
+      </div>
+      <div class="form-group" id="fg-besttime">
+        <label class="form-label">Thời gian đẹp nhất</label>
+        <input class="form-input" id="f-besttime" placeholder="VD: 16:00 – 18:00">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Địa chỉ</label>
+        <input class="form-input" id="f-address" placeholder="VD: 363 Lê Lợi, Tuy Hòa">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ghi chú</label>
+        <input class="form-input" id="f-notes" placeholder="VD: Ngon, ~40k, mở sáng sớm">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ảnh</label>
+        <div class="upload-area" onclick="document.getElementById('f-photos').click()">
+          <input type="file" id="f-photos" accept="image/*" multiple onchange="handlePhotos(event)">
+          Tap để chọn ảnh<br>Tự đọc toạ độ GPS nếu ảnh có
+        </div>
+        <div class="preview-imgs" id="preview-imgs"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Vị trí trên bản đồ</label>
+        <div class="map-pick-hint">Tap nút bên dưới, sau đó tap lên bản đồ để chọn đúng vị trí</div>
+        <div class="coord-display" id="coord-display">Chưa chọn vị trí</div>
+        <button class="btn btn-outline" style="margin-top:8px;width:100%;padding:10px;font-size:13px" onclick="startPickMode()">📍 Chọn vị trí trên bản đồ</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Huỷ</button>
+      <button class="btn btn-primary" onclick="savePlace()" id="save-btn">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const SB_URL = 'https://dkpntoddzhdoexaynrvj.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRrcG50b2Rkemhkb2V4YXlucnZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyODIzNTIsImV4cCI6MjA5Mjg1ODM1Mn0.uvt84bABOnEnpB5aQ7SlvVdEwNgauefCw0S2gmRX10o';
+const SLOTS = { breakfast:'Sáng', lunch:'Trưa', afternoon:'Chiều', dinner:'Tối' };
+
+let places=[], markers={}, filters={ cat:new Set(), slot:new Set() };
+let pLat=null, pLng=null, pFiles=[], curCat='food', editId=null, pickMode=false;
+
+const map = L.map('map',{zoomControl:false}).setView([13.09,109.32],11);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OSM',maxZoom:19}).addTo(map);
+L.control.zoom({position:'topright'}).addTo(map);
+
+map.on('click', e => {
+  if (!pickMode) return;
+  pLat = e.latlng.lat.toFixed(6);
+  pLng = e.latlng.lng.toFixed(6);
+  document.getElementById('coord-display').textContent = `${pLat}, ${pLng}`;
+  stopPickMode();
+  document.getElementById('modal-overlay').classList.add('show');
+  showToast('Đã chọn vị trí ✓');
+});
+
+async function sb(path, opts={}) {
+  const r = await fetch(SB_URL+'/rest/v1'+path, {
+    ...opts,
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation',...(opts.headers||{})}
+  });
+  const t = await r.text();
+  if (!r.ok) throw new Error(t);
+  return t ? JSON.parse(t) : [];
+}
+
+async function load() {
+  try {
+    places = await sb('/places?select=*,photos(*)&order=number.asc');
+    render();
+  } catch(e) { showToast('Lỗi: '+e.message); }
+}
+
+function filtered() {
+  return places.filter(p => {
+    if (filters.cat.size && !filters.cat.has(p.category)) return false;
+    if (filters.slot.size && !(p.meal_slots||[]).some(s=>filters.slot.has(s))) return false;
+    return true;
+  });
+}
+
+function render() {
+  document.getElementById('count-badge').textContent = places.length + ' nơi';
+  renderList(); renderMarkers();
+}
+
+function score(p) {
+  const fields = p.category === 'food'
+    ? [p.name, p.area, p.address, p.specialty, p.must_try, p.meal_slots?.length, p.notes, p.lat, p.photos?.length]
+    : [p.name, p.area, p.best_time, p.notes, p.lat, p.photos?.length];
+  const filled = fields.filter(Boolean).length;
+  const pct = Math.round(filled / fields.length * 100);
+  const cls = pct >= 75 ? 'bar-high' : pct >= 40 ? 'bar-mid' : 'bar-low';
+  return { pct, cls };
+}
+
+function renderList() {
+  const f = filtered();
+  const el = document.getElementById('places-list');
+  if (!f.length) { el.innerHTML='<div class="empty-state">Không có địa điểm phù hợp</div>'; return; }
+  el.innerHTML = f.map(p => {
+    const sub = p.category==='food' ? (p.specialty||p.address||'') : (p.best_time||p.area||'');
+    const slots = (p.meal_slots||[]).map(s=>`<span class="tag tag-slot">${SLOTS[s]||s}</span>`).join('');
+    const area = p.area ? `<span class="tag tag-area">${p.area}</span>` : '';
+    const must = p.must_try ? `<span class="tag tag-must">⭐</span>` : '';
+    const {pct, cls} = score(p);
+    return `<div class="place-card" id="card-${p.id}" onclick="selectPlace(${p.id})">
+      <div class="card-num num-${p.category}">${p.number||'?'}</div>
+      <div class="card-info">
+        <div class="card-name">${p.name||'Địa điểm #'+p.number}</div>
+        <div class="card-sub">${sub}</div>
+        <div class="card-tags">${slots}${area}${must}</div>
+        <div class="info-bar"><div class="info-bar-fill ${cls}" style="width:${pct}%"></div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderMarkers() {
+  Object.values(markers).forEach(m=>map.removeLayer(m));
+  markers={};
+  filtered().forEach(p => {
+    if (!p.lat||!p.lng) return;
+    const icon = L.divIcon({className:'',html:`<div class="map-pin ${p.category==='food'?'pin-food':'pin-play'}"><span>${p.number||'?'}</span></div>`,iconSize:[30,30],iconAnchor:[15,30]});
+    const m = L.marker([p.lat,p.lng],{icon}).addTo(map);
+    m.on('click',()=>focusFromMap(p.id));
+    markers[p.id]=m;
+  });
+}
+
+function selectPlace(id) {
+  const p = places.find(x=>x.id===id);
+  if (!p) return;
+  document.querySelectorAll('.place-card').forEach(c=>c.classList.remove('active'));
+  const card = document.getElementById('card-'+id);
+  if (card) { card.classList.add('active'); card.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+  showPopup(p);
+  if (p.lat&&p.lng) {
+    setTimeout(() => {
+      map.invalidateSize();
+      map.setView([p.lat, p.lng], 16, {animate:false});
+      map.panBy([0, -80], {animate:true});
+    }, 80);
+  }
+}
+
+function focusFromMap(id) {
+  // tap pin trên bản đồ → cuộn list + show bottom sheet
+  const p = places.find(x=>x.id===id);
+  if (!p) return;
+  document.querySelectorAll('.place-card').forEach(c=>c.classList.remove('active'));
+  const card = document.getElementById('card-'+id);
+  if (card) { card.classList.add('active'); card.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+  showPopup(p);
+}
+
+function closeDetail() {
+  document.getElementById('detail-sheet').classList.remove('show');
+}
+
+function showPopup(p) {
+  const ph = p.photos||[];
+  const photosEl = document.getElementById('detail-photos');
+  const bodyEl = document.getElementById('detail-body');
+
+  // photos — horizontal scroll
+  if (ph.length) {
+    photosEl.innerHTML = ph.map(photo =>
+      `<img class="detail-photo" src="${photo.url}" loading="lazy"/>`
+    ).join('');
+    photosEl.style.display = 'flex';
+  } else {
+    photosEl.innerHTML = `<div class="detail-no-photo">Chưa có ảnh</div>`;
+    photosEl.style.display = 'flex';
+  }
+
+  // info
+  const slots = (p.meal_slots||[]).map(s=>`<span class="tag tag-slot">${SLOTS[s]||s}</span>`).join('');
+  const area = p.area?`<span class="tag tag-area">${p.area}</span>`:'';
+  const must = p.must_try?`<span class="tag tag-must">⭐ ${p.must_try}</span>`:'';
+  const rows = [
+    p.specialty?`<div class="detail-row"><strong>Món:</strong> ${p.specialty}</div>`:'',
+    p.best_time?`<div class="detail-row"><strong>Giờ đẹp:</strong> ${p.best_time}</div>`:'',
+    p.address?`<div class="detail-row"><strong>Địa chỉ:</strong> ${p.address}</div>`:'',
+    p.notes?`<div class="detail-row"><strong>Ghi chú:</strong> ${p.notes}</div>`:'',
+  ].filter(Boolean).join('');
+
+  bodyEl.innerHTML = `
+    <div class="detail-num-name">
+      <div class="detail-num" style="background:${p.category==='food'?'var(--food)':'var(--play)'}">${p.number}</div>
+      <div class="detail-name">${p.name||'Địa điểm #'+p.number}</div>
+    </div>
+    <div class="detail-tags">${slots}${area}${must}</div>
+    ${rows}
+  `;
+
+  document.getElementById('detail-edit-btn').onclick = () => { closeDetail(); openEdit(p.id); };
+  document.getElementById('detail-sheet').classList.add('show');
+}
+
+function openEdit(id) {
+  map.closePopup();
+  const p = places.find(x=>x.id===id);
+  if (!p) return;
+  editId=id;
+  pLat=p.lat?String(p.lat):null;
+  pLng=p.lng?String(p.lng):null;
+  document.getElementById('modal-title').textContent='Sửa #'+p.number;
+  document.getElementById('save-btn').textContent='Lưu thay đổi';
+  setCategory(p.category);
+  document.getElementById('f-name').value=p.name||'';
+  document.getElementById('f-area').value=p.area||'';
+  document.getElementById('f-specialty').value=p.specialty||'';
+  document.getElementById('f-must').value=p.must_try||'';
+  document.getElementById('f-address').value=p.address||'';
+  document.getElementById('f-notes').value=p.notes||'';
+  document.getElementById('f-besttime').value=p.best_time||'';
+  document.querySelectorAll('.slot-btn').forEach(b=>b.classList.toggle('active',(p.meal_slots||[]).includes(b.dataset.slot)));
+  document.getElementById('coord-display').textContent=pLat?`${pLat}, ${pLng}`:'Chưa có — tap bản đồ để chọn';
+  document.getElementById('preview-imgs').innerHTML='';
+  pFiles=[];
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function openModal(mode) {
+  editId=null; pLat=null; pLng=null; pFiles=[];
+  document.getElementById('modal-title').textContent='Thêm địa điểm';
+  document.getElementById('save-btn').textContent='Lưu';
+  setCategory('food');
+  ['f-name','f-area','f-specialty','f-must','f-address','f-notes','f-besttime'].forEach(id=>document.getElementById(id).value='');
+  document.querySelectorAll('.slot-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('coord-display').textContent='Chưa chọn vị trí';
+  document.getElementById('preview-imgs').innerHTML='';
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function closeModal() { document.getElementById('modal-overlay').classList.remove('show'); }
+function closeModalOutside(e) { if(e.target===document.getElementById('modal-overlay')) closeModal(); }
+
+function startPickMode() {
+  closeModal();
+  pickMode=true;
+  document.getElementById('pick-bar').classList.add('show');
+}
+function stopPickMode() {
+  pickMode=false;
+  document.getElementById('pick-bar').classList.remove('show');
+}
+
+function setCategory(cat) {
+  curCat=cat;
+  document.getElementById('tab-food').className='cat-tab'+(cat==='food'?' active-food':'');
+  document.getElementById('tab-play').className='cat-tab'+(cat==='play'?' active-play':'');
+  document.getElementById('fg-specialty').style.display=cat==='food'?'':'none';
+  document.getElementById('fg-must').style.display=cat==='food'?'':'none';
+  document.getElementById('fg-slots').style.display=cat==='food'?'':'none';
+  document.getElementById('fg-besttime').style.display=cat==='play'?'':'none';
+}
+
+function toggleSlot(el) { el.classList.toggle('active'); }
+
+function toggleFilter(el) {
+  const {type,val}=el.dataset;
+  const set=filters[type];
+  const cls=type==='cat'?(val==='food'?'on-food':'on-play'):'on-slot';
+  if(set.has(val)){set.delete(val);el.classList.remove(cls);}
+  else{set.add(val);el.classList.add(cls);}
+  renderList(); renderMarkers(); fitAll();
+}
+
+async function savePlace() {
+  const slots=[...document.querySelectorAll('.slot-btn.active')].map(b=>b.dataset.slot);
+  const payload={
+    category:curCat,
+    name:document.getElementById('f-name').value.trim()||null,
+    specialty:document.getElementById('f-specialty').value.trim()||null,
+    address:document.getElementById('f-address').value.trim()||null,
+    area:document.getElementById('f-area').value.trim()||null,
+    meal_slots:slots.length?slots:null,
+    best_time:document.getElementById('f-besttime').value.trim()||null,
+    must_try:document.getElementById('f-must').value.trim()||null,
+    notes:document.getElementById('f-notes').value.trim()||null,
+    lat:pLat?parseFloat(pLat):null,
+    lng:pLng?parseFloat(pLng):null,
+  };
+  try {
+    if (editId) {
+      await sb(`/places?id=eq.${editId}`,{method:'PATCH',body:JSON.stringify(payload)});
+      // upload ảnh mới nếu có khi sửa
+      for (const file of pFiles) {
+        const ext=file.name.split('.').pop();
+        const fname=`${editId}_${Date.now()}.${ext}`;
+        const up=await fetch(`${SB_URL}/storage/v1/object/place-photos/${fname}`,{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':file.type},body:file});
+        if(up.ok) {
+          await sb('/photos',{method:'POST',body:JSON.stringify({place_id:editId,url:`${SB_URL}/storage/v1/object/public/place-photos/${fname}`})});
+        } else {
+          const errText = await up.text();
+          showToast('Lỗi upload ảnh: '+errText.slice(0,60));
+        }
+      }
+      showToast('Đã cập nhật ✓');
+    } else {
+      const maxN=places.length?Math.max(...places.map(p=>p.number||0)):0;
+      payload.number=maxN+1;
+      const [saved]=await sb('/places',{method:'POST',body:JSON.stringify(payload)});
+      for (const file of pFiles) {
+        const ext=file.name.split('.').pop();
+        const fname=`${saved.id}_${Date.now()}.${ext}`;
+        const up=await fetch(`${SB_URL}/storage/v1/object/place-photos/${fname}`,{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':file.type},body:file});
+        if(up.ok) {
+          await sb('/photos',{method:'POST',body:JSON.stringify({place_id:saved.id,url:`${SB_URL}/storage/v1/object/public/place-photos/${fname}`})});
+        } else {
+          const errText = await up.text();
+          showToast('Lỗi upload ảnh: '+errText.slice(0,60));
+        }
+      }
+      showToast('Đã thêm #'+saved.number+' ✓');
+    }
+    closeModal(); load();
+  } catch(e) { showToast('Lỗi: '+e.message); }
+}
+
+function handlePhotos(e) {
+  pFiles=[...e.target.files];
+  const pre=document.getElementById('preview-imgs');
+  pre.innerHTML='';
+  pFiles.forEach(file=>{
+    const r=new FileReader();
+    r.onload=ev=>{const img=document.createElement('img');img.src=ev.target.result;img.className='preview-img';pre.appendChild(img);};
+    r.readAsDataURL(file);
+    readEXIF(file).then(c=>{
+      if(c&&!pLat){pLat=c.lat.toFixed(6);pLng=c.lng.toFixed(6);document.getElementById('coord-display').textContent=`${pLat}, ${pLng} (GPS ảnh)`;showToast('Đọc GPS ảnh thành công');}
+    });
+  });
+}
+
+function readEXIF(file){
+  return new Promise(res=>{
+    const r=new FileReader();
+    r.onload=e=>{
+      try{
+        const v=new DataView(e.target.result);
+        if(v.getUint16(0)!==0xFFD8)return res(null);
+        let off=2;
+        while(off<v.byteLength){
+          if(v.getUint16(off)===0xFFE1){
+            const ed=new DataView(e.target.result,off+4);
+            const le=ed.getUint16(6)===0x4949;
+            const ifd=ed.getUint32(10,le)+6;
+            const n=ed.getUint16(ifd,le);
+            let gps=null;
+            for(let i=0;i<n;i++)if(ed.getUint16(ifd+2+i*12,le)===0x8825)gps=ed.getUint32(ifd+2+i*12+8,le)+6;
+            if(!gps)return res(null);
+            const gn=ed.getUint16(gps,le);let lR,lt,lnR,ln;
+            for(let i=0;i<gn;i++){
+              const tag=ed.getUint16(gps+2+i*12,le),vo=ed.getUint32(gps+2+i*12+8,le)+6;
+              if(tag===1)lR=String.fromCharCode(ed.getUint8(gps+2+i*12+8));
+              if(tag===3)lnR=String.fromCharCode(ed.getUint8(gps+2+i*12+8));
+              if(tag===2)lt=[ed.getUint32(vo,le)/ed.getUint32(vo+4,le),ed.getUint32(vo+8,le)/ed.getUint32(vo+12,le),ed.getUint32(vo+16,le)/ed.getUint32(vo+20,le)];
+              if(tag===4)ln=[ed.getUint32(vo,le)/ed.getUint32(vo+4,le),ed.getUint32(vo+8,le)/ed.getUint32(vo+12,le),ed.getUint32(vo+16,le)/ed.getUint32(vo+20,le)];
+            }
+            if(lt&&ln){const la=lt[0]+lt[1]/60+lt[2]/3600,lo=ln[0]+ln[1]/60+ln[2]/3600;return res({lat:lR==='S'?-la:la,lng:lnR==='W'?-lo:lo});}
+            return res(null);
+          }
+          off+=2+v.getUint16(off+2);
+        }
+        res(null);
+      }catch{res(null);}
+    };
+    r.readAsArrayBuffer(file);
+  });
+}
+
+function fitAll(){
+  const pts = Object.values(markers).map(m=>m.getLatLng());
+  if (!pts.length) { showToast('Chưa có địa điểm nào có vị trí'); return; }
+  if (pts.length === 1) { map.setView(pts[0], 15, {animate:true}); return; }
+  map.fitBounds(L.latLngBounds(pts).pad(0.15), {animate:true});
+}
+
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+load();
+</script>
+</body>
+</html>
